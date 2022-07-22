@@ -8,40 +8,27 @@ import net.kyori.adventure.text.TranslatableComponent;
 
 public class ChatUtil
 {
-	public static String plaintext ( Component component )
+	public static enum TYPE {
+		INVALID,
+		SYSTEM,
+		PLAYER
+	}
+
+	public static String plaintextSystemChat ( Component component )
 	{
-		String ret = "";
-		if ( component instanceof TranslatableComponent )
+		if ( !( component instanceof TranslatableComponent ) )
+			return null;
+		TranslatableComponent trans = (TranslatableComponent) component;
+		if ( trans.key().equals( "chat.type.text" ) )
 		{
-			TranslatableComponent tc = (TranslatableComponent) component;
-			if ( tc.key().equals( "chat.type.text" ) )
-			{
-				List<Component> contents = tc.args();
-				int i = 0;
-				for ( Component content : contents )
-				{
-					if ( i == 0 )
-						ret = "<" + plaintext( content ) + ">";
-					else
-						ret += " " + plaintext( content );
-					i++;
-				}
-				if ( i > 2 )
-					System.err.println( "[WRN] Unknown Chat Format" );
-			}
-			else if ( tc.key().equals( "chat.type.admin" ) )
-			{
-				System.out.println( tc );
-			}
-			else
-				System.err.println( "[WRN] Unhandled Chat Type '" + tc.key() + "'" );
+			List<Component> texts = (List<Component>) trans.args();
+			TextComponent [] text = texts.toArray( new TextComponent [0] );
+			return "<" + text[0].content() + "> " + text[1].content();
 		}
-		else if ( component instanceof TextComponent )
+		else if ( trans.key().equals( "chat.type.admin" ) )
 		{
-			ret += ( (TextComponent) component ).content();
+			System.err.println( trans.compact().toString() );
 		}
-		else
-			System.err.println( component.getClass() );
-		return ret;
+		return null;
 	}
 }
