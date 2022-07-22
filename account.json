@@ -1,7 +1,5 @@
 {
-	"username":"",
-	"password":"",
-	"remoteId":"",
-	"profileId":"",
-	"type":"MICROSOFT"
+	"type":"<MICROSOFT/MOJANG>",
+	"username":"<username>",
+	"password":"<password>"
 }

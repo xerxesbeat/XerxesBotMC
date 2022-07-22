@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.net.Proxy;
 import java.time.Instant;
 import java.util.LinkedList;
+import java.util.UUID;
 
 import com.github.steveice10.mc.auth.exception.request.RequestException;
 import com.github.steveice10.mc.auth.service.AuthenticationService;
@@ -38,6 +39,7 @@ public class Main
 	private static final long TICK_MS = 1200; // outbound chat rate is tied to this
 	private static final File CFG_ACCT = new File ( "account.json" );
 	private static boolean LOG_PACKETS = false; // verbose packet classnames in stdout
+	private static boolean LOG_CHATS = false;
 
 	private enum STATE {
 		LAUNCHED,
@@ -52,9 +54,10 @@ public class Main
 	}
 	private static final int EXIT_SUCCESS = 0;
 	private static final int EXIT_ERROR_UNKNOWN = 1;
-	private static final int EXIT_ERROR_AUTH = 2;
-	private static final int EXIT_ERROR_CFG = 3;
-	private static final int EXIT_ERROR_DISCONNECT = 4;
+	private static final int EXIT_ERROR_SYNTAX = 2;
+	private static final int EXIT_ERROR_AUTH = 3;
+	private static final int EXIT_ERROR_CFG = 4;
+	private static final int EXIT_ERROR_DISCONNECT = 5;
 
 	private static STATE state = STATE.LAUNCHED;
 	private static Session client = null;
@@ -67,13 +70,44 @@ public class Main
 			@Override
 			protected void onChat ( Component content )
 			{
-				System.out.println( content.toString() );
+				if ( Main.LOG_CHATS )
+					System.out.println( content.toString() );
 			}
 		});
 	}
 
+	public static void syntax ()
+	{
+		System.err.println( "Syntax: <command> [<host_addr>[:<port>]]" );
+		System.exit( EXIT_ERROR_SYNTAX );
+	}
+
 	public static void main ( String [] args )
 	{
+		if ( args.length == 2 )
+		{
+			String [] argv = args[1].split( ":" );
+			int port = 25565;
+			if ( argv.length > 2 )
+				syntax();
+			else if ( argv.length == 2 )
+				try
+				{
+					port = Integer.parseInt( argv[1] );
+					if ( port <= 0 || port > 65535 )
+					{
+						System.err.println( "[ERR] Invalid Port Specified" );
+						syntax();
+					}
+				}
+				catch ( NumberFormatException e )
+				{
+					System.err.println( "[ERR] Invalid Port Specified" );
+					syntax();
+				}
+			HOST = argv[0];
+			PORT = port;
+		}
 		state = STATE.LOGIN;
 		try
 		{
@@ -81,12 +115,13 @@ public class Main
 		}
 		catch ( AuthenticationException e )
 		{
-			System.err.println( "Authentication Failure" );
+			System.err.println( "[ERR] Authentication Failure" );
+			e.printStackTrace();
 			System.exit( EXIT_ERROR_AUTH );
 		}
 		catch ( IOException e )
 		{
-			System.err.println( "Account Configuration Missing" );
+			System.err.println( "[ERR] Account Configuration Missing" );
 			System.exit( EXIT_ERROR_CFG );
 		}
 		if ( protocol != null )
@@ -104,7 +139,7 @@ public class Main
 					if ( session != client )
 					{
 						state = STATE.ERROR;
-						System.err.println( "ERROR: Multiple Client Sessions Detected" );
+						System.err.println( "[ERR] Multiple Client Sessions Detected" );
 						return;
 					}
 					if ( packet instanceof com.github.steveice10.mc.protocol.packet.ingame.clientbound.entity.ClientboundEntityEventPacket );
@@ -155,7 +190,7 @@ public class Main
 					if ( session != client )
 					{
 						state = STATE.ERROR;
-						System.err.println( "ERROR: Multiple Client Sessions Detected" );
+						System.err.println( "[ERR] Multiple Client Sessions Detected" );
 						return;
 					}
 					if ( LOG_PACKETS )
@@ -166,7 +201,7 @@ public class Main
 				public void packetError ( PacketErrorEvent event )
 				{
 					state = STATE.ERROR;
-					System.err.println( "ERROR: Packet Error (" + event.getCause().toString() + ")" );
+					System.err.println( "[ERR] Packet Error (" + event.getCause().toString() + ")" );
 					return;
 				}
 	
@@ -174,6 +209,7 @@ public class Main
 				public void connected ( ConnectedEvent event )
 				{
 					System.out.println( "Connection Established" );
+					chat( "/gamemode creative" );
 				}
 	
 				@Override
@@ -253,7 +289,7 @@ run:	while ( true )
 		Account acct = Account.fromJson( acctCfg );
 		AuthenticationService authService;
 		if ( acct.type == Account.TYPE.MICROSOFT )
-			authService = new MsaAuthenticationService ( acct.remoteId, acct.profileId );
+			authService = new MsaAuthenticationService ( UUID.randomUUID().toString(), null );
 		else
 			authService = new MojangAuthenticationService ();
 		authService.setUsername( acct.username );
@@ -265,7 +301,7 @@ run:	while ( true )
 		}
 		catch ( RequestException e )
 		{
-			throw new AuthenticationException ( authService );
+			throw new AuthenticationException ( authService, e );
 		}
 		protocol = new MinecraftProtocol ( authService.getSelectedProfile(), authService.getAccessToken() );
 	}
@@ -305,23 +341,14 @@ run:	while ( true )
 			MOJANG
 		};
 
-		String username, password, remoteId, profileId;
 		TYPE type;
+		String username, password;
 
-		Account ( String username, String password )
+		Account ( TYPE type, String username, String password )
 		{
-			this.type = TYPE.MOJANG;
+			this.type = type;
 			this.username = username;
 			this.password = password;
-		}
-
-		Account ( String username, String password, String remoteId, String profileId )
-		{
-			this.type = TYPE.MICROSOFT;
-			this.username = username;
-			this.password = password;
-			this.remoteId = remoteId;
-			this.profileId = profileId;
 		}
 
 		static Account fromJson ( String json )
